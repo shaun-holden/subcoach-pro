@@ -24,9 +24,9 @@ import { EmailService } from "./emailService";
 import { notificationService } from "./notificationService";
 
 if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+  console.error("WARNING: STRIPE_SECRET_KEY is not set. Billing features will fail.");
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder", {
   apiVersion: "2025-07-30.basil",
 });
 

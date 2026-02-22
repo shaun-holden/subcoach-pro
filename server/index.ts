@@ -4,6 +4,10 @@ import { setupVite, serveStatic, log } from "./vite";
 import { reminderScheduler } from "./reminderScheduler";
 
 const app = express();
+
+// Health check — must be registered before any middleware that could fail
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
