@@ -14,7 +14,7 @@ import {
   calendarEvents,
 } from "../shared/schema";
 import { eq } from "drizzle-orm";
-import { isAuthenticated, setupAuth } from "./replitAuth";
+import { isAuthenticated, setupAuth } from "./localAuth";
 import {
   ObjectStorageService,
   ObjectNotFoundError,
@@ -43,21 +43,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const userId = req.user.claims.sub;
-      const dbUser = await storage.getUser(userId);
-      
-      if (!dbUser) {
-        return res.status(401).json({ message: "User not found" });
-      }
-
-      // Return user data with claims
+      const user = req.user;
       res.json({
-        id: dbUser.id,
-        email: dbUser.email,
-        firstName: dbUser.firstName,
-        lastName: dbUser.lastName,
-        profileImageUrl: dbUser.profileImageUrl,
-        userType: dbUser.userType || "",
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl,
+        userType: user.userType || "",
       });
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -68,7 +61,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User type selection endpoint
   app.post('/api/auth/select-user-type', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { userType } = req.body;
 
       if (!['coach', 'owner'].includes(userType)) {
@@ -88,7 +81,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get subscription status
   app.get('/api/subscription-status', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const owner = await storage.getOwner(userId);
       
       if (!owner) {
@@ -201,7 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get payment method
   app.get('/api/payment-method', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const owner = await storage.getOwner(userId);
       
       if (!owner || !owner.stripeCustomerId) {
@@ -239,7 +232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get billing history
   app.get('/api/billing-history', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const owner = await storage.getOwner(userId);
       
       if (!owner || !owner.stripeCustomerId) {
@@ -274,7 +267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create setup intent for adding payment methods
   app.post('/api/create-setup-intent', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       let owner = await storage.getOwner(userId);
       
       if (!owner) {
@@ -286,8 +279,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create Stripe customer if doesn't exist
       if (!customerId) {
         const customer = await stripe.customers.create({
-          email: req.user.claims.email,
-          name: `${req.user.claims.first_name} ${req.user.claims.last_name}`,
+          email: req.user.email,
+          name: `${req.user.firstName} ${req.user.lastName}`,
           metadata: {
             userId: userId,
             gymName: owner.gymName
@@ -314,7 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Attach payment method as default after SetupIntent succeeds
   app.post('/api/attach-payment-method', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { setupIntentId } = req.body;
 
       if (!setupIntentId) {
@@ -352,7 +345,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Verify and complete checkout after Stripe redirect
   app.post('/api/stripe/verify-checkout', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { sessionId } = req.body;
       
       if (!sessionId) {
@@ -410,7 +403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/subscription/switch', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { planType } = switchPlanSchema.parse(req.body);
       
       let owner = await storage.getOwner(userId);
@@ -433,8 +426,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let customerId = owner.stripeCustomerId;
       if (!customerId) {
         const customer = await stripe.customers.create({
-          email: req.user.claims.email,
-          name: `${req.user.claims.first_name} ${req.user.claims.last_name}`,
+          email: req.user.email,
+          name: `${req.user.firstName} ${req.user.lastName}`,
           metadata: {
             userId: userId,
             gymName: owner.gymName
@@ -558,7 +551,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get('/api/opportunities', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Get coach profile to access their address
       const coach = await storage.getCoach(userId);
@@ -608,7 +601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/applications', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       let coach = await storage.getCoach(userId);
       
       if (!coach) {
@@ -627,7 +620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/coaches/apply', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const user = req.user;
       let coach = await storage.getCoach(userId);
       
@@ -792,7 +785,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/rate-negotiations', isAuthenticated, async (req: any, res) => {
     try {
       const { applicationId, proposedRate, message } = req.body;
-      const userId = req.user?.claims?.sub;
+      const userId = req.user?.id;
       
       if (!applicationId || !proposedRate) {
         return res.status(400).json({ error: "Application ID and proposed rate are required" });
@@ -849,7 +842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { action, proposedRate, message } = req.body;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       if (!['accept', 'decline', 'counter'].includes(action)) {
         return res.status(400).json({ error: "Invalid action" });
@@ -924,7 +917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Profile management endpoints
   app.get('/api/coach/profile', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const coach = await storage.getCoach(userId);
       if (!coach) {
         return res.status(404).json({ message: "Coach profile not found" });
@@ -938,7 +931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/coach/profile', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const profileData = insertCoachSchema.parse(req.body);
       
       let coach = await storage.getCoach(userId);
@@ -977,7 +970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/coaches/certifications', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const certData = certificationSchema.parse(req.body);
       
       const coach = await storage.getCoach(userId);
@@ -1014,7 +1007,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/owner/profile', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const owner = await storage.getOwner(userId);
       if (!owner) {
         return res.status(404).json({ message: "Owner profile not found" });
@@ -1028,7 +1021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/owner/profile', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const profileData = insertOwnerSchema.parse(req.body);
       
       let owner = await storage.getOwner(userId);
@@ -1054,7 +1047,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Plural version for frontend compatibility
   app.get('/api/owners/profile', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const owner = await storage.getOwner(userId);
       if (!owner) {
         return res.status(404).json({ message: "Owner profile not found" });
@@ -1068,7 +1061,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/owners/profile', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const profileData = insertOwnerSchema.parse(req.body);
       
       let owner = await storage.getOwner(userId);
@@ -1094,7 +1087,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Substitute request management
   app.get('/api/owner-requests', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const owner = await storage.getOwner(userId);
       if (!owner) {
         return res.status(404).json({ message: "Owner profile not found" });
@@ -1110,7 +1103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/owner-requests', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const owner = await storage.getOwner(userId);
       if (!owner) {
         return res.status(404).json({ message: "Owner profile not found" });
@@ -1158,7 +1151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/applications/:id/accept', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Get application details with request
       const applicationData = await storage.getApplicationById(id);
@@ -1310,7 +1303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/owner-requests/:id', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const owner = await storage.getOwner(userId);
       
       if (!owner) {
@@ -1367,7 +1360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/owner-requests/:id', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Verify ownership
       const owner = await storage.getOwner(userId);
@@ -1388,7 +1381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/calendar-events/:id/export', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Get calendar event from database
       const [event] = await db
@@ -1537,7 +1530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { userId, userType } = req.params;
       
       // Verify user is requesting their own analytics
-      if (req.user.claims.sub !== userId) {
+      if (req.user.id !== userId) {
         return res.status(403).json({ message: "Forbidden - can only access your own analytics" });
       }
       

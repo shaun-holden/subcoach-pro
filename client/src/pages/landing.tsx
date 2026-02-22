@@ -1,27 +1,57 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Users, Dumbbell, Building2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useQueryClient } from "@tanstack/react-query";
+
+type AuthMode = "login" | "register";
 
 export default function Landing() {
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [isSelectingUserType, setIsSelectingUserType] = useState(false);
-  const { user, isLoading } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "" });
+  const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const handleLogin = () => {
-    window.location.href = "/api/login";
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleUserTypeSelection = async (userType: 'coach' | 'owner') => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const endpoint = authMode === "login" ? "/api/login" : "/api/register";
+      const body =
+        authMode === "login"
+          ? { email: form.email, password: form.password }
+          : { email: form.email, password: form.password, firstName: form.firstName, lastName: form.lastName };
+
+      await apiRequest(endpoint, "POST", body);
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    } catch (err: any) {
+      toast({
+        title: authMode === "login" ? "Login failed" : "Registration failed",
+        description: err?.message || "Please check your details and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUserTypeSelection = async (userType: "coach" | "owner") => {
     try {
       setIsSelectingUserType(true);
       await apiRequest("/api/auth/select-user-type", "POST", { userType });
-      
-      // Redirect to appropriate dashboard
-      if (userType === 'coach') {
+      if (userType === "coach") {
         window.location.href = "/coach-dashboard";
       } else {
         window.location.href = "/owner-dashboard";
@@ -36,7 +66,7 @@ export default function Landing() {
     }
   };
 
-  // If user is logged in but hasn't selected a user type, show selection
+  // User type selection screen
   if (user && (!user.userType || user.userType === "")) {
     return (
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
@@ -48,21 +78,19 @@ export default function Landing() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to SubCoach Pro</h1>
             <p className="text-gray-600">Please select your account type to continue</p>
           </div>
-          
           <div className="space-y-4">
             <Button
               data-testid="button-coach-selection"
-              onClick={() => handleUserTypeSelection('coach')}
+              onClick={() => handleUserTypeSelection("coach")}
               disabled={isSelectingUserType}
               className="w-full h-16 text-lg bg-brand-500 hover:bg-brand-600 text-white"
             >
               <Dumbbell className="mr-3 h-5 w-5" />
               I'm a Coach
             </Button>
-            
             <Button
               data-testid="button-owner-selection"
-              onClick={() => handleUserTypeSelection('owner')}
+              onClick={() => handleUserTypeSelection("owner")}
               disabled={isSelectingUserType}
               variant="outline"
               className="w-full h-16 text-lg border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -78,27 +106,111 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Hero Section */}
+      {/* Hero / Auth Section */}
       <div className="relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-          <div className="text-center">
-            <div className="mx-auto h-20 w-20 bg-brand-500 rounded-full flex items-center justify-center mb-8">
-              <Users className="h-10 w-10 text-white" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="flex flex-col lg:flex-row items-center gap-12">
+            {/* Left: headline */}
+            <div className="flex-1 text-center lg:text-left">
+              <div className="mx-auto lg:mx-0 h-20 w-20 bg-brand-500 rounded-full flex items-center justify-center mb-8">
+                <Users className="h-10 w-10 text-white" />
+              </div>
+              <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">SubCoach Pro</h1>
+              <p className="text-xl text-gray-600 mb-8 max-w-lg">
+                Connect coaches with substitution opportunities. The professional platform for gym owners and fitness coaches.
+              </p>
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">
-              SubCoach Pro
-            </h1>
-            <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              Connect coaches with substitution opportunities. The professional platform for gym owners and fitness coaches.
-            </p>
-            <Button
-              data-testid="button-get-started"
-              onClick={handleLogin}
-              size="lg"
-              className="bg-brand-500 hover:bg-brand-600 text-white px-8 py-4 text-lg"
-            >
-              Get Started
-            </Button>
+
+            {/* Right: auth card */}
+            <div className="w-full max-w-md">
+              <Card>
+                <CardHeader>
+                  <div className="flex border-b mb-2">
+                    <button
+                      type="button"
+                      className={`flex-1 pb-3 text-sm font-medium ${authMode === "login" ? "border-b-2 border-brand-500 text-brand-600" : "text-gray-500"}`}
+                      onClick={() => setAuthMode("login")}
+                    >
+                      Log In
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 pb-3 text-sm font-medium ${authMode === "register" ? "border-b-2 border-brand-500 text-brand-600" : "text-gray-500"}`}
+                      onClick={() => setAuthMode("register")}
+                    >
+                      Sign Up
+                    </button>
+                  </div>
+                  <CardTitle className="text-xl">
+                    {authMode === "login" ? "Welcome back" : "Create your account"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    {authMode === "register" && (
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <Label htmlFor="firstName">First name</Label>
+                          <Input
+                            id="firstName"
+                            name="firstName"
+                            value={form.firstName}
+                            onChange={handleChange}
+                            placeholder="Jane"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <Label htmlFor="lastName">Last name</Label>
+                          <Input
+                            id="lastName"
+                            name="lastName"
+                            value={form.lastName}
+                            onChange={handleChange}
+                            placeholder="Doe"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        required
+                        value={form.email}
+                        onChange={handleChange}
+                        placeholder="you@example.com"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        name="password"
+                        type="password"
+                        required
+                        value={form.password}
+                        onChange={handleChange}
+                        placeholder="••••••••"
+                      />
+                    </div>
+                    <Button
+                      data-testid="button-get-started"
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full bg-brand-500 hover:bg-brand-600 text-white"
+                    >
+                      {isSubmitting
+                        ? "Please wait…"
+                        : authMode === "login"
+                        ? "Log In"
+                        : "Create Account"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </div>
@@ -114,9 +226,7 @@ export default function Landing() {
               Streamline your coaching business with our comprehensive platform
             </p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* For Coaches */}
             <Card className="text-center p-6">
               <CardContent className="pt-6">
                 <Dumbbell className="h-12 w-12 text-brand-500 mx-auto mb-4" />
@@ -130,8 +240,6 @@ export default function Landing() {
                 </ul>
               </CardContent>
             </Card>
-
-            {/* For Gym Owners */}
             <Card className="text-center p-6">
               <CardContent className="pt-6">
                 <Building2 className="h-12 w-12 text-brand-500 mx-auto mb-4" />
@@ -145,8 +253,6 @@ export default function Landing() {
                 </ul>
               </CardContent>
             </Card>
-
-            {/* Platform Benefits */}
             <Card className="text-center p-6">
               <CardContent className="pt-6">
                 <Users className="h-12 w-12 text-brand-500 mx-auto mb-4" />
@@ -167,15 +273,16 @@ export default function Landing() {
       {/* CTA Section */}
       <div className="bg-brand-500 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Ready to get started?
-          </h2>
+          <h2 className="text-3xl font-bold text-white mb-4">Ready to get started?</h2>
           <p className="text-xl text-brand-100 mb-8">
-            Join thousands of coaches and gym owners already using SubCoach Pro
+            Join coaches and gym owners already using SubCoach Pro
           </p>
           <Button
             data-testid="button-join-now"
-            onClick={handleLogin}
+            onClick={() => {
+              setAuthMode("register");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
             size="lg"
             variant="secondary"
             className="bg-white text-brand-600 hover:bg-gray-100 px-8 py-4 text-lg"
